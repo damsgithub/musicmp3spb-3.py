@@ -32,10 +32,12 @@ import os
 import urllib
 from bs4 import BeautifulSoup
 
-base_path_lin = os.path.normpath("/root/musicmp3spb")
-base_path_win = os.path.normpath("C:/Users/localadmin/Downloads/zic_temp")
-debug = 0 # two levels of verbosity, 1 or 2
-version = 3
+base_path_lin = os.path.normpath(".")
+#base_path_lin = os.path.normpath("/root/musicmp3spb")
+base_path_win = os.path.normpath(".")
+#base_path_win = os.path.normpath("C:/Users/localadmin/Downloads/zic_temp")
+debug = 0 # 3 levels of verbosity: 0 (not verbose), 1 or 2
+version = 3.1
 
 def download_file(url, file_name, album_dir):
     u = urllib.request.urlopen(url)
