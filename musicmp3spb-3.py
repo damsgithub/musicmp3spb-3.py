@@ -37,7 +37,7 @@ base_path_lin = os.path.normpath(".")
 #base_path_win = os.path.normpath("C:/Users/localadmin/Downloads/zic_temp")
 base_path_win = os.path.normpath(".")
 debug = 1 # 3 levels of verbosity: 0 (none), 1 or 2
-version = 3.1
+version = 3.2
 
 def sanitize_path(path):
     chars_to_remove = str.maketrans('/\\?*|":><', '         ')
