@@ -32,38 +32,72 @@ import os
 import urllib
 from bs4 import BeautifulSoup
 
-base_path_lin = os.path.normpath(".")
 #base_path_lin = os.path.normpath("/root/musicmp3spb")
-base_path_win = os.path.normpath(".")
+base_path_lin = os.path.normpath(".")
 #base_path_win = os.path.normpath("C:/Users/localadmin/Downloads/zic_temp")
-debug = 0 # 3 levels of verbosity: 0 (not verbose), 1 or 2
+base_path_win = os.path.normpath(".")
+debug = 1 # 3 levels of verbosity: 0 (none), 1 or 2
 version = 3.1
 
-def download_file(url, file_name, album_dir):
-    u = urllib.request.urlopen(url)
-    file_size = int(u.info()['content-length'])
-    file_path = album_dir+"/"+file_name
-
-    if not os.path.exists(file_path) or (os.path.getsize(file_path) < file_size):
-        f = open(file_name, 'wb')
-        print("Downloading: %s, Bytes: %s" % (file_name, file_size))
-        file_size_dl = 0
-        block_sz = 8192
-        while True:
-            buffer = u.read(block_sz)
-            if not buffer:
-                break
-
-            file_size_dl += len(buffer)
-            f.write(buffer)
-            status = r"%10d  [%3.2f%%]" % (file_size_dl, file_size_dl * 100. / file_size)
-            status = status + chr(8)*(len(status)+1)
-            print(status,)
-
-        f.close()
+def sanitize_path(path):
+    chars_to_remove = str.maketrans('/\\?*|":><', '         ')
+    return path.translate(chars_to_remove)
 
 
-def download_song(url, album_dir):
+def download_file(url, file_name):
+    partial_dl = 0
+    dlded_size = 0
+
+    if os.path.exists(file_name):
+        dlded_size = os.path.getsize(file_name)
+
+    req = urllib.request.Request(url)
+    u = urllib.request.urlopen(req)
+
+    real_size = int(u.info()['content-length'])
+
+    # determine where to start the file download (continue or start at beginning)
+    if (0 < dlded_size < real_size):
+        req = urllib.request.Request(url, headers={'Range': 'bytes=%s-%s' % (dlded_size, real_size)})
+        u = urllib.request.urlopen(req)
+
+        if (u.getcode() == 206):
+            partial_dl = 1
+        else:
+            dlded_size = 0
+            if debug: print("Range/partial download is not supported")
+    elif (dlded_size == real_size):
+        print("Skipping: %s, Total Bytes: %s. Already Completed." % (file_name, real_size))
+        return
+    elif (dlded_size > real_size):
+        print("Error: %s is bigger than original file, we will overwrite it!" % file_name)
+        dlded_size = 0
+
+    # append or truncate
+    if (partial_dl):
+        f = open(file_name, 'ab+')
+        print("Resuming: %s at %s, Total Bytes: %s" % (file_name, dlded_size, real_size))
+    else:
+        f = open(file_name, 'wb+')
+        print("Downloading: %s, Total Bytes: %s" % (file_name, real_size))
+
+    # get the file
+    block_sz = 8192
+    while True:
+        buffer = u.read(block_sz)
+        if not buffer:
+            break
+
+        dlded_size += len(buffer)
+        f.write(buffer)
+        status = r"%10d  [%3.2f%%]" % (dlded_size, dlded_size * 100. / real_size)
+        status = status + chr(8)*(len(status)+1)
+        print(status,)
+
+    f.close()
+
+
+def download_song(url):
     print("Downloading song from %s" % url)
     file_name = ""
 
@@ -106,17 +140,10 @@ def download_song(url, album_dir):
         print("Error: Cannot find song's real link for: %s" % file_name, file=sys.stderr)
         return
 
-    download_file(song_link['href'], file_name, album_dir)
+    download_file(song_link['href'], file_name)
 
 
 def download_album(url, base_path):
-    if base_path == "":
-        if sys.platform.startswith('win'):
-            base_path = base_path_win
-        else:
-            base_path = base_path_lin
-    if debug > 1: print("base_path: %s" % base_path)
-
     # get website base address (we will need it later to preprend it to images and songs relative urls')
     base_url = url.split('//', 1)
     base_url = base_url[0] + '//' + base_url[1].split('/', 1)[0]
@@ -136,7 +163,6 @@ def download_album(url, base_path):
     
     album_infos_re = re.compile('<h1><a href="/artist/.+?.html" title="(.+?) mp3">.+?<div class="Name">\n(.+?)<br\s?/>', re.S)
     album_infos = album_infos_re.search(page_content)
-    chars_to_remove = str.maketrans('/\\?*|":><', '         ')
 
     if not album_infos:
         artist = input("Unable to get ARTIST NAME. Please enter here: ")
@@ -144,9 +170,6 @@ def download_album(url, base_path):
     else:
         artist = album_infos.group(1)
         title = album_infos.group(2)
-
-    artist = artist.translate(chars_to_remove)
-    title = title.translate(chars_to_remove)
 
     print("Artist: %s" % artist)
     print("Titre: %s" % title)
@@ -161,7 +184,10 @@ def download_album(url, base_path):
     else:
         year = input("Unable to get ALBUM YEAR. Please enter here (may leave blank): ")
 
-    album_dir = base_path + "/" + artist + " - " + title
+    # create album's dir and cd to it
+    album_dir = sanitize_path(os.path.join(base_path, artist) + " - " + title)
+    if debug: print("Album's dir: %s" % album_dir)
+
     if not os.path.isdir(album_dir) and not os.path.exists(album_dir):
         os.mkdir(album_dir)
     os.chdir(album_dir)
@@ -187,7 +213,7 @@ def download_album(url, base_path):
         if image_num > 0 :
             image_name = image_name + str(image_num)
 
-        download_file(image['src'], image_name + ".jpg", album_dir)
+        download_file(image['src'], image_name + ".jpg")
 
         image_num += 1
 
@@ -203,39 +229,54 @@ def download_album(url, base_path):
             if re.match(r'^/', link['href']):
                 link['href'] = base_url + link['href']
 
-            download_song(link['href'], album_dir)
+            download_song(link['href'])
 
-def help():
-    print("""Simple Python script to download albums from http://musicmp3spb.org site.
+    # go back to upper dir once the album's download is completed
+    os.chdir('..')
+
+
+def help(version, script_name):
+    print(
+"""Simple Python script to download albums from http://musicmp3spb.org site, version %s.
 
 Usage:
 
-sr@linux:/tmp$ ./musicmp3spb.py 'http://musicmp3spb.org/album/dualism.html' [/local/path]
+user@computer:/tmp$ %s 'http://musicmp3spb.org/album/dualism.html' [/local/path]
 Downloading song from http://musicmp3spb.org/download/arms_of_the_sea/418ec9e6c514a8fb5a0d071ebd2a208a1387032264
 Downloading: 01-arms_of_the_sea.mp3, Bytes: 15730982
       1826816 [11.61%]
 
 Run the script passing it the URL of the album from http://musicmp3spb.org site (in this case it is
-http://musicmp3spb.org/album/dualism.html). It will create album directory in "base_path", cd to it and
-download all songs and covers available on that page.""")
+http://musicmp3spb.org/album/dualism.html). It will create album directory in the optionnal path argument (or
+else in current directory), cd to it and download all songs and covers available on that page.
+
+user@computer:/tmp$ %s -h
+Prints this help.
+""" % (version, script_name, script_name))
+
 
 def main():
-    arg2 = ""
+    if sys.platform.startswith('win'):
+        base_path = base_path_win
+    else:
+        base_path = base_path_lin
+
+    script_name = os.path.basename(sys.argv[0])
+
     if len(sys.argv) < 2:
-        script_name = os.path.basename(sys.argv[0])
-        print("usage: %s -h or %s album_url [local_path]" % (script_name, script_name))
-        print("Version: %s" % version)
+        help(version, script_name)
         sys.exit(1)
     elif len(sys.argv) > 2:
-        arg2 = sys.argv[2]
+        base_path = sys.argv[2]
 
     arg = sys.argv[1]
 
-    if arg == '-h' or arg == '--help':
-        help()
+    if (arg == '-h') or (arg == '--help'):
+        help(version, script_name)
     else:
         try:
-            download_album(arg, arg2)
+            if debug > 1: print("base_path: %s" % base_path)
+            download_album(arg, base_path)
         except Exception as e:
             print("Error: Cannot download URL: %s\n\t%s" % (arg, e), file=sys.stderr)
 
