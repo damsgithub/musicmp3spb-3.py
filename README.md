@@ -6,7 +6,7 @@ Features included:
 * Windows support (install latest python, then "python -m pip install BeautifulSoup4")
 * Automatically retry incomplete downloads
 * Automatically resume if re-run on same album
-* Create directory with "Artist - Album" name.
+* Creation of directory with "Artist - Album" name.
 * Multiple simultaneous downloads
 * Downloads all albums from an artist
 
