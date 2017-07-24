@@ -12,3 +12,4 @@ Features included:
 
 TODO:
 * make some kind of progress bar (difficult because of the simultaneous downloads).
+* streaming mode?
