@@ -9,6 +9,7 @@
 import re
 import sys
 import os
+import signal
 import html
 import time
 import random
@@ -17,7 +18,7 @@ from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
 
-version = 4.0
+version = 4.2
 debug = 0 # 3 levels of verbosity: 0 (none), 1 or 2
 net_timeout = 10 # timeout in s for network requests
 nb_conn = 3 # nb of simultaneous download threads, tempfile.ru doesn't like more than 3 or 4!
@@ -72,7 +73,7 @@ def spinning_wheel():
 
 
 def dl_status(file_name, dlded_size, real_size):
-    status = r'%-40s        %05.2f of %05.2f MB [%3d%%]' % \
+    status = r'%-50s        %05.2f of %05.2f MB [%3d%%]' % \
         (file_name, to_MB(dlded_size), to_MB(real_size), dlded_size * 100. / real_size)
     return status
 
@@ -103,6 +104,9 @@ def dl_cover(page_soup, url):
 
         image_num += 1
 
+    if (image_num == 0):
+        print("** No cover found for this album **", file=sys.stderr)
+
 
 def get_base_url(url):
     # get website base address to preprend it to images, songs and albums relative urls'
@@ -116,21 +120,21 @@ def open_url(url, data):
     while True:
         try:
             u = urllib.request.urlopen(url, data, timeout=net_timeout)
+            redirect = u.geturl()
+            if re.search(r'/404.*', redirect):
+                print("** Page not found, aborting on url: %s **" % url, file=sys.stderr)
+                u = None
         except Exception as e:
-            #msg = "Trying to (re)connect"
-            #sys.stdout.write(msg)
-            #sys.stdout.flush()
-            # we dont want all threads to try again at the same time:
             time.sleep(random.randint(2,5)) 
-            #backspaces = chr(8)*(len(msg))
-            #sys.stdout.write(backspaces)
-            print("** Connection failed, trying to (re)connect **")
+            print("** Connection refused, reconnecting **", file=sys.stderr)
             continue
         return u
 
 
 def get_page_soup(url, data):
     page = open_url(url, data=data)
+    if not page:
+        return None
     page_soup = BeautifulSoup(page, "html.parser", from_encoding=page.info().get_param('charset'))
     if debug > 1: print("page_soup: %s" % page_soup)
     page.close()
@@ -145,8 +149,8 @@ def prepare_album_dir(page_content, base_path):
 
     album_infos_re = re.compile('<h1><a href="/artist/.+?.html" title="(.+?) mp3">'
                                 '.+?<div class="Name">\n(.+?)<br\s?/>', re.S)
-    # Beautifulsoup converts "&" to "&amp;" so that it be valid html, 
-    # we need to convert them back with html.unescape
+    # Beautifulsoup converts "&" to "&amp;" so that it be valid html.
+    # We need to convert them back with html.unescape
     album_infos = album_infos_re.search(html.unescape(page_content))
 
     print("\n")
@@ -186,136 +190,157 @@ def sanitize_path(path):
 
 
 def download_file(url, file_name):
-    partial_dl = 0
-    dlded_size = 0
-
-    if os.path.exists(file_name):
-        dlded_size = os.path.getsize(file_name)
-
-    req = urllib.request.Request(url)
-    u = open_url(req, data=None)
-
-    i = 0
-    while (i < 5):
-        try:
-            real_size = int(u.info()['content-length'])
-        except Exception as e:
-            if (i == 4):
-                print("** Unable to get the real size of %s from the server. **" % file_name)
-                real_size = -1
-            else:
-                i = +1
-            continue
-        break
-
-    # find where to start the file download (continue or start at beginning)
-    if (0 < dlded_size < real_size):
-        u.close()
-        req = urllib.request.Request(url, headers={'Range': 'bytes=%s-%s' % (dlded_size, real_size)})
-        u = open_url(req, data=None)
-
-        # test if the server supports the Range header
-        if (u.getcode() == 206):
-            partial_dl = 1
-        else:
-            dlded_size = 0
-            nb_conn = 0
-            if debug: print("** Range/partial download is not supported **")
-
-    elif (dlded_size == real_size):
-        print("%s (file already complete, skipped)" % dl_status(file_name, dlded_size, real_size))
-        return
-    elif (dlded_size > real_size):
-        print("** Error: %s is bigger than original file or the real size could "
-              "not be determined, we will (re)download it! **" % file_name)
+    try:
+        partial_dl = 0
         dlded_size = 0
+    
+        if os.path.exists(file_name):
+            dlded_size = os.path.getsize(file_name)
+    
+        req = urllib.request.Request(url)
+        u = open_url(req, data=None)
+        if not u: return
 
-    # append or truncate
-    if partial_dl:
-        f = open(file_name, 'ab+')
-    else:
-        f = open(file_name, 'wb+')
-
-    # get the file
-    block_sz = 8192
-    spin = spinning_wheel()
-    while True:
-        buffer = u.read(block_sz)
-        if not buffer:
+        i = 0
+        while (i < 5):
+            try:
+                real_size = int(u.info()['content-length'])
+            except Exception as e:
+                if (i == 4):
+                    print("** Unable to get the real size of %s from the server. **" % file_name, file=sys.stderr)
+                    real_size = -1
+                else:
+                    i = +1
+                continue
             break
-
-        dlded_size += len(buffer)
-        f.write(buffer)
-
-        # show progress
-        #sys.stdout.write(next(spin))
-        #sys.stdout.flush()
-        #time.sleep(0.1)
-        #sys.stdout.write('\b')
-
-    if (real_size == -1): 
-        real_size = dlded_size
-        print("%s (file downloaded, but could not verify if it is complete)" 
-               % dl_status(file_name, dlded_size, real_size))
-    elif (real_size == dlded_size):
-        print("%s (file downloaded and complete)" 
-               % dl_status(file_name, dlded_size, real_size))
-    elif (dlded_size < real_size):
-        print("%s (file download incomplete!)" 
-               % dl_status(file_name, dlded_size, real_size))
-
-    #sys.stdout.write('\n')
-    u.close()
-    f.close()
+    
+        # find where to start the file download (continue or start at beginning)
+        if (0 < dlded_size < real_size):
+            u.close()
+            req = urllib.request.Request(url, headers={'Range': 'bytes=%s-%s' % (dlded_size, real_size)})
+            u = open_url(req, data=None)
+            if not u: return
+    
+            # test if the server supports the Range header
+            if (u.getcode() == 206):
+                partial_dl = 1
+            else:
+                dlded_size = 0
+                nb_conn = 0
+                if debug: print("** Range/partial download is not supported by server **", file=sys.stderr)
+    
+        elif (dlded_size == real_size):
+            print("%s (file already complete, skipped)" % dl_status(file_name, dlded_size, real_size))
+            return
+        elif (dlded_size > real_size):
+            print("** Error: %s is bigger than original file or the real size could "
+                  "not be determined, we will (re)download it! **" % file_name, file=sys.stderr)
+            dlded_size = 0
+    
+        # append or truncate
+        if partial_dl:
+            f = open(file_name, 'ab+')
+        else:
+            f = open(file_name, 'wb+')
+    
+        # get the file
+        block_sz = 8192
+        spin = spinning_wheel()
+        while True:
+            buffer = u.read(block_sz)
+            if not buffer:
+                break
+    
+            dlded_size += len(buffer)
+            f.write(buffer)
+    
+            # show progress
+            #sys.stdout.write(next(spin))
+            #sys.stdout.flush()
+            #time.sleep(0.1)
+            #sys.stdout.write('\b')
+    
+        if (real_size == -1): 
+            real_size = dlded_size
+            print("%s (file downloaded, but could not verify if it is complete)" 
+                   % dl_status(file_name, dlded_size, real_size))
+        elif (real_size == dlded_size):
+            print("%s (file downloaded and complete)" 
+                   % dl_status(file_name, dlded_size, real_size))
+        elif (dlded_size < real_size):
+            print("%s (file download incomplete!)" 
+                   % dl_status(file_name, dlded_size, real_size))
+    
+        #sys.stdout.write('\n')
+        u.close()
+        f.close()
+    except KeyboardInterrupt as e:
+        if debug: print("** download_file: keyboard interrupt detected **", file=sys.stderr)
+        raise e
 
 
 def download_song(url):
-    if debug: print("Downloading song from %s" % url)
-    file_name = ""
-
-    page_soup = get_page_soup(url, str.encode(''))
-
-    # get the filename
-    for form in page_soup.find_all('form'):
-        if re.match(r'/file/.*', form.attrs['action']):
-            break
-    if debug: print("form_attr: " + form.attrs['action'])
-
-    for link in page_soup.find_all('a', href=True):
-        if re.match(form.attrs['action'], link['href']):
-            file_name = link.contents[0]
-            break
-    if file_name != "":
-        if debug: print("got_filename: " + file_name)
-    else:
-        print("** Error: Cannot find filename for: %s **" % link['href'], file=sys.stderr)
+    try:
+        if debug: print("Downloading song from %s" % url)
+        file_name = ""
+    
+        page_soup = get_page_soup(url, str.encode(''))
+        if not page_soup: 
+            if debug: print("** Unable to get song's page soup **", file=sys.stderr)
+            return
+    
+        # get the filename
+        for form in page_soup.find_all('form'):
+            if re.match(r'/file/.*', form.attrs['action']):
+                break
+        if debug: print("form_attr: " + form.attrs['action'])
+    
+        for link in page_soup.find_all('a', href=True):
+            if re.match(form.attrs['action'], link['href']):
+                file_name = link.contents[0]
+                break
+        if file_name != "":
+            if debug: print("got_filename: " + file_name)
+        else:
+            print("** Error: Cannot find filename for: %s **" % link['href'], file=sys.stderr)
+            return
+    
+        # we need to re-submit the same page with an hidden input value to get the real link
+        submit_value = page_soup.find('input', {'name': 'robot_code'}).get('value')
+        if debug: print("submit_value: %s" % submit_value)
+    
+        data = urllib.parse.urlencode([('robot_code', submit_value)])
+    
+        response = open_url(url, data=None)
+        if not response: return
+        real_link = response.geturl()
+        response.close()
+        response_soup = get_page_soup(real_link, str.encode(data))
+        if not response_soup:
+            if debug: print("** Unable to get song's page soup (2) **", file=sys.stderr)
+            return
+    
+        for song_link in response_soup.find_all('a', href=True):
+            if re.match('http://tempfile.ru/download/.*', song_link['href']):
+                break
+        if song_link['href'] != "":
+            if debug: print("song_link: " + song_link['href'])
+        else:
+            print("** Error: Cannot find song's real link for: %s **" % file_name, file=sys.stderr)
+            return
+    
+        download_file(song_link['href'], file_name)
+    except KeyboardInterrupt:
+        print("** keyboard interrupt detected, finishing processes! **", file=sys.stderr)
+        # just return: http://jessenoller.com/2009/01/08/multiprocessingpool-and-keyboardinterrupt/
         return
-
-    # we need to re-submit the same page with an hidden input value to get the real link
-    submit_value = page_soup.find('input', {'name': 'robot_code'}).get('value')
-    if debug: print("submit_value: %s" % submit_value)
-
-    data = urllib.parse.urlencode([('robot_code', submit_value)])
-
-    response = open_url(url, data=None)
-    real_link = response.geturl()
-    response.close()
-    response_soup = get_page_soup(real_link, str.encode(data))
-
-    for song_link in response_soup.find_all('a', href=True):
-        if re.match('http://tempfile.ru/download/.*', song_link['href']):
-            break
-    if song_link['href'] != "":
-        if debug: print("song_link: " + song_link['href'])
-    else:
-        print("** Error: Cannot find song's real link for: %s **" % file_name, file=sys.stderr)
-        return
-
-    download_file(song_link['href'], file_name)
 
 
 def download_album(url, base_path):
     page_soup = get_page_soup(url, str.encode(''))
+    if not page_soup:
+        if debug: print("** Unable to get album's page soup **", file=sys.stderr)
+        return
     page_content = str(page_soup)
     if debug > 1: print(page_content)
 
@@ -333,26 +358,35 @@ def download_album(url, base_path):
             continue
 
         if title_regexp.match(link['title']):
-            #url_arr = link['href'].split('/')
-
             # prepend base url if necessary
             if re.match(r'^/', link['href']):
                 link['href'] = get_base_url(url) + link['href']
-
-    #       download_song(link['href'])
             songs_links.append(link['href'])
 
-    pool = Pool(processes=nb_conn)
-    pool.map(download_song, songs_links)
-    pool.close()
-    pool.join()
+    if not songs_links:
+        print("** Unable to detect any song links, skipping this album/url **")
+    else:
+        pool = Pool(processes=nb_conn)
+        try:
+            pool.map(download_song, songs_links)
+            pool.close()
+            pool.join()
+        except KeyboardInterrupt as e:
+            print("** Program interrupted by user, exiting! **", file=sys.stderr)
+            pool.terminate()
+            pool.join()
+            sys.exit(1)
 
     os.chdir('..')
 
 
 def download_artist(url, base_path):
     page_soup = get_page_soup(url, str.encode(''))
-    print("** Info: we are going to download all albums from this artist! **")
+    if not page_soup:
+        if debug: print("** Unable to get artist's page soup **", file=sys.stderr)
+        return 
+
+    print("** Warning: we are going to download all albums from this artist! **")
 
     for link in page_soup.find_all('a', href=True):
         if re.match(r'/album/.*', link['href']):
@@ -383,7 +417,7 @@ def main():
             elif re.search(r'/album/.*', arg):
                 download_album(arg, base_path)
             else:
-                print("** Error: unable to recognize url, it should contain '/artist/' or '/album/'! **")
+                print("** Error: unable to recognize url, it should contain '/artist/' or '/album/'! **", file=sys.stderr)
 
         except Exception as e:
             print("** Error: Cannot download URL: %s\n\t%s **" % (arg, e), file=sys.stderr)
