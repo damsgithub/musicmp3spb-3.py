@@ -10,3 +10,5 @@ Features included:
 * Multiple simultaneous downloads
 * Downloads all albums from an artist
 
+TODO:
+* make some kind of progress bar (difficult because of the simultaneous downloads).
