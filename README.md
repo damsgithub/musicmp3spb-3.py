@@ -3,7 +3,7 @@ Python 3 port of https://github.com/xor512/musicmp3spb.org (http://musicmp3spb.o
 
 Features included:
 * Cover downloading
-* Windows support: install latest python (tested with 3.6.2), then do "python -m pip install BeautifulSoup4 Pysocks"
+* Windows/Linux support: install python 3 (tested with 3.6.2), then do "python -m pip install BeautifulSoup4 Pysocks"
 * Resume incomplete songs and albums downloads
 * Creation of directory with "Artist - Album" name.
 * Multiple simultaneous downloads to download faster
