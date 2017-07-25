@@ -9,7 +9,7 @@ Features included:
 * Creation of directory with "Artist - Album" name.
 * Multiple simultaneous downloads
 * Downloads all albums from an artist
-* socks proxy
+* socks proxy support
 
 
 TODO:
