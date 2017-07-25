@@ -20,6 +20,8 @@ Install:
 * install required modules: BeautifulSoup4 and Pysocks. Use your standard repo for linux, for Windows do "python -m pip install BeautifulSoup4 Pysocks"
 
 Usage:
+
+```sh
 ------------------------------------------------------------------------------------------------------------------
 ################## To download an album, give it an url with '/album/' in it #####################################
 ------------------------------------------------------------------------------------------------------------------
@@ -76,3 +78,4 @@ optional arguments:
                         Sock proxy: "address:port" without "http://"
   -p PATH, --path PATH  Base directory in which album(s) will be downloaded. Defaults to current directory
   -v, --version         show program's version number and exit
+```
