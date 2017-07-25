@@ -6,8 +6,8 @@ Features included:
 * Windows support: install latest python (tested with 3.6.2), then do "python -m pip install BeautifulSoup4 Pysocks"
 * Resume incomplete songs and albums downloads
 * Creation of directory with "Artist - Album" name.
-* Multiple simultaneous downloads
-* Downloads all albums from an artist
+* Multiple simultaneous downloads to download faster
+* Able to download all albums from an artist
 * Socks proxy support
 
 
