@@ -6,60 +6,85 @@
 # terms of the Do What The Fuck You Want To Public License, Version 2,
 # as published by Sam Hocevar.  See the COPYING file for more details.
 
+# requires installation of the following modules: PySocks and Beautifulsoup4
+
 import re
 import sys
 import os
 import signal
-import html
 import time
 import random
+import socks
+import socket
 import urllib.request
+import html
+import argparse
 from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
 
-version = 4.2
+version = 4.4
 debug = 0 # 3 levels of verbosity: 0 (none), 1 or 2
-net_timeout = 10 # timeout in s for network requests
+net_timeout = 10 # timeout in seconds for network requests
 nb_conn = 3 # nb of simultaneous download threads, tempfile.ru doesn't like more than 3 or 4!
+socks_proxy = ""
+socks_port = ""
+script_name = os.path.basename(sys.argv[0])
+
+description = "Python script to download albums from http://musicmp3spb.org, version %s." % version
+help_string = description + """
+
+------------------------------------------------------------------------------------------------------------------
+################## To download an album, give it an url with '/album/' in it #####################################
+------------------------------------------------------------------------------------------------------------------
+user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/album/thunder_and_lightning.html'
+** We will try to use 6 simultaneous downloads, progress will be shown **
+** after each completed file but not necessarily in album's order. **
+
+Artist: Art Zoyd
+Album: Phase IV
+Year: 1982
+cover.jpg                                                 00.03 of 00.03 MB [100%%] (file downloaded and complete)
+cover1.jpg                                                00.03 of 00.03 MB [100%%] (file downloaded and complete)
+06-deux_preludes.mp3                                      05.19 of 05.19 MB [100%%] (file downloaded and complete)
+05-ballade.mp3                                            09.41 of 09.41 MB [100%%] (file downloaded and complete)
+03-derniere_danse.mp3                                     10.54 of 10.54 MB [100%%] (file downloaded and complete)
+[...]
+
+It will create an "Artist - Album" directory in the path given as argument (or else in current
+ directory if not given), and download all songs and covers available on that page.
 
 
-def help():
-    script_name = os.path.basename(sys.argv[0])
-    print(
-"""Python script to automatically download albums from http://musicmp3spb.org site, version %s.
+------------------------------------------------------------------------------------------------------------------
+################## To download all albums from an artist, give it an url with '/artist/' in it ###################
+------------------------------------------------------------------------------------------------------------------
 
-### To download an album, give it an url with '/album/' in it :
+user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html'
+** We will try to use 3 simultaneous downloads, progress will be shown **
+** after each completed file but not necessarily in album's order. **
+** Warning: we are going to download all albums from this artist! **
 
-user@computer:/tmp$ %s 'http://musicmp3spb.org/album/thunder_and_lightning.html' [/local/path]
-Artist: Thin Lizzy
-Album: Thunder And Lightning
-Year: 1983
-Downloading: cover.jpg, Total Bytes: 48619
-Downloading: 01-thunder_and_lightning.mp3, Total Bytes: 12208063
-    606208  [4.97%%]
-
-It will create an "Artist - Album" directory in the path given as argument (or else in current directory if not given),
-and download all songs and covers available on that page.
-
-
-### To download all albums from an artist, give it an url with '/artist/' in it:
-
-user@computer:/tmp$ %s 'http://musicmp3spb.org/artist/thin_lizzy.html' [/local/path]
-Info: we are going to download all albums from this artist!
 
 Artist: Thin Lizzy
 Album: Live At O2 Shepherds Bush Empire, London (17.12.2012) CD1
 Year: 2013
-Downloading: cover.jpg, Total Bytes: 54860
-Downloading: 01-are_you_ready.mp3, Total Bytes: 7893202
-    966656 [12.25%%]
+cover.jpg                                                 00.05 of 00.05 MB [100%%] (file downloaded and complete)
+03-dont_believe_a_word.mp3                                05.33 of 05.33 MB [100%%] (file downloaded and complete)
+01-are_you_ready.mp3                                      07.53 of 07.53 MB [100%%] (file downloaded and complete)
+02-jailbreak.mp3                                          09.49 of 09.49 MB [100%%] (file downloaded and complete)
+
 
 It will iterate on all albums of this artist.
 
 
-### For more info, see https://github.com/damsgithub/musicmp3spb-3.py
-""" % (version, script_name, script_name))
+------------------------------------------------------------------------------------------------------------------
+################# Command line help ##############################################################################
+------------------------------------------------------------------------------------------------------------------
+
+For more info, see https://github.com/damsgithub/musicmp3spb-3.py
+
+
+""" % (script_name, script_name)
 
 
 def to_MB(a_bytes):
@@ -117,17 +142,26 @@ def get_base_url(url):
 
 
 def open_url(url, data):
+    if socks_proxy and socks_port:
+        socks.set_default_proxy(socks.SOCKS5, socks_proxy, socks_port)
+        socket.socket = socks.socksocket
+
     while True:
         try:
             u = urllib.request.urlopen(url, data, timeout=net_timeout)
             redirect = u.geturl()
             if re.search(r'/404.*', redirect):
-                print("** Page not found, aborting on url: %s **" % url, file=sys.stderr)
+                print("** Page not found (404), aborting on url: %s **" % url, file=sys.stderr)
                 u = None
-        except Exception as e:
-            time.sleep(random.randint(2,5)) 
-            print("** Connection refused, reconnecting **", file=sys.stderr)
+        except (urllib.error.HTTPError, socket.timeout, ConnectionError) as e:
+            time.sleep(random.randint(2,5))
+            print("** Connection problem (%s), reconnecting **" % e.reason, file=sys.stderr)
             continue
+        except (urllib.error.URLError, Exception) as e:
+            print("** Url seems invalid, aborting (%s) **" % url, file=sys.stderr)
+            if (e.reason):
+                print("** reason : %s **" % e.reason)
+            u = None
         return u
 
 
@@ -153,7 +187,7 @@ def prepare_album_dir(page_content, base_path):
     # We need to convert them back with html.unescape
     album_infos = album_infos_re.search(html.unescape(page_content))
 
-    print("\n")
+    print("")
     if not album_infos:
         artist = input("Unable to get ARTIST NAME. Please enter here: ")
         title = input("Unable to get ALBUM NAME. Please enter here: ")
@@ -332,7 +366,8 @@ def download_song(url):
         download_file(song_link['href'], file_name)
     except KeyboardInterrupt:
         print("** keyboard interrupt detected, finishing processes! **", file=sys.stderr)
-        # just return: http://jessenoller.com/2009/01/08/multiprocessingpool-and-keyboardinterrupt/
+        # just return, see: 
+        # http://jessenoller.com/2009/01/08/multiprocessingpool-and-keyboardinterrupt/
         return
 
 
@@ -366,6 +401,7 @@ def download_album(url, base_path):
     if not songs_links:
         print("** Unable to detect any song links, skipping this album/url **")
     else:
+        # we launch the threads to do the downloads
         pool = Pool(processes=nb_conn)
         try:
             pool.map(download_song, songs_links)
@@ -394,33 +430,47 @@ def download_artist(url, base_path):
  
 
 def main():
-    base_path = "."
+    parser = argparse.ArgumentParser(description=help_string, add_help=True, 
+                                     formatter_class=argparse.RawTextHelpFormatter)
 
-    if len(sys.argv) < 2:
-        help()
-        sys.exit(1)
-    elif len(sys.argv) > 2:
-        base_path = sys.argv[2]
+    parser.add_argument(
+        "-d", "--debug", type=int, choices=range(0,3), default=1, help="Debug verbosity: 0, 1, 2" )
+    parser.add_argument(
+        "-s", "--socks", type=str, default=None, help='Sock proxy: "address:port" without "http://"')
+    parser.add_argument(
+        "-p", "--path", type=str, default=".", help="Base directory in which album(s) will be"
+                                                    " downloaded. Defaults to current directory")
+    parser.add_argument(
+        "-v", "--version", action='version', version='%(prog)s, version: '+str(version))
 
-    arg = sys.argv[1]
+    parser.add_argument("url", action='store', help="URL of album or artist page")
+    args = parser.parse_args()
 
-    if (arg == '-h') or (arg == '--help'):
-        help()
-    else:
-        try:
-            if debug > 1: print("arg: %s, base_path: %s" % (arg, base_path))
-            print("** We will try to use %s simultaneous downloads, progress will be shown" % nb_conn, 
-                  "after each completed file but not necessarily in album's order **")
+    if (args.debug):
+        debug = args.debug
 
-            if re.search(r'/artist/.*', arg):
-                download_artist(arg, base_path)
-            elif re.search(r'/album/.*', arg):
-                download_album(arg, base_path)
-            else:
-                print("** Error: unable to recognize url, it should contain '/artist/' or '/album/'! **", file=sys.stderr)
+    if (args.socks):
+        (socks_proxy, socks_port) = args.socks.split(':')
+        if debug: print("proxy socks: %s %s" % (socks_proxy, socks_port))
+        if not socks_port.isdigit():
+            print ("** Error in your socks proxy definition, exiting. **")
+            sys.exit(1)
 
-        except Exception as e:
-            print("** Error: Cannot download URL: %s\n\t%s **" % (arg, e), file=sys.stderr)
+    try:
+        print("** We will try to use %s simultaneous downloads, progress will be shown **" % nb_conn)
+        print("** after each completed file but not necessarily in album's order. **")
+
+        if re.search(r'/artist/.*', args.url):
+            download_artist(args.url, args.path)
+        elif re.search(r'/album/.*', args.url):
+            download_album(args.url, args.path)
+        else:
+            print("** Error: unable to recognize url, it should contain '/artist/' or '/album/'! **", 
+                  file=sys.stderr)
+
+    except Exception as e:
+        print("** Error: Cannot download URL: %s\n\t%s **" % (args.url, e), file=sys.stderr)
 
 if __name__ == "__main__":
     main()
+
