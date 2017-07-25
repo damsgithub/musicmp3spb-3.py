@@ -4,12 +4,11 @@ Python 3 port of https://github.com/xor512/musicmp3spb.org (http://musicmp3spb.o
 Features included:
 * Cover downloading
 * Windows support (install latest python, then "python -m pip install BeautifulSoup4")
-* Automatically retry incomplete downloads
-* Automatically resume if re-run on same album
+* Resume incomplete songs and albums downloads
 * Creation of directory with "Artist - Album" name.
 * Multiple simultaneous downloads
 * Downloads all albums from an artist
-* socks proxy support
+* Socks proxy support
 
 
 TODO:
