@@ -9,8 +9,9 @@ Features included:
 * Creation of directory with "Artist - Album" name.
 * Multiple simultaneous downloads
 * Downloads all albums from an artist
+* socks proxy
+
 
 TODO:
 * make some kind of progress bar (difficult because of the simultaneous downloads).
 * streaming mode?
-* socks proxy
