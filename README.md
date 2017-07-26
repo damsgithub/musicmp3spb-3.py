@@ -28,7 +28,7 @@ Usage:
 ------------------------------------------------------------------------------------------------------------------
 ################## To download an album, give it an url with '/album/' in it #####################################
 ------------------------------------------------------------------------------------------------------------------
-user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/album/thunder_and_lightning.html'
+user@computer:/tmp$ musicmp3spb-3.py [-p /path] 'http://musicmp3spb.org/album/thunder_and_lightning.html'
 ** We will try to use 6 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 
@@ -48,7 +48,7 @@ It will create an "Artist - Album" directory in the path given as argument (or e
 ################## To download all albums from an artist, give it an url with '/artist/' in it ###################
 ------------------------------------------------------------------------------------------------------------------
 
-user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html'
+user@computer:/tmp$ musicmp3spb-3.py [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html'
 ** We will try to use 3 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 ** Warning: we are going to download all albums from this artist! **
