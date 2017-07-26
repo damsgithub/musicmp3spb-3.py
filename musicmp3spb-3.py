@@ -23,12 +23,12 @@ from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
 
-version = 4.4
-debug = 0 # 3 levels of verbosity: 0 (none), 1 or 2
-net_timeout = 10 # timeout in seconds for network requests
-nb_conn = 3 # nb of simultaneous download threads, tempfile.ru doesn't like more than 3 or 4!
+debug = 0
 socks_proxy = ""
 socks_port = ""
+timeout = 10
+nb_conn = 3
+version = 4.6
 script_name = os.path.basename(sys.argv[0])
 
 description = "Python script to download albums from http://musicmp3spb.org, version %s." % version
@@ -148,13 +148,16 @@ def get_base_url(url):
 
 
 def open_url(url, data):
+    global socks_proxy
+    global socks_port
+    global timeout
     if socks_proxy and socks_port:
         socks.set_default_proxy(socks.SOCKS5, socks_proxy, socks_port)
         socket.socket = socks.socksocket
 
     while True:
         try:
-            u = urllib.request.urlopen(url, data, timeout=net_timeout)
+            u = urllib.request.urlopen(url, data, timeout=timeout)
             redirect = u.geturl()
             if re.search(r'/404.*', redirect):
                 print("** Page not found (404), aborting on url: %s **" % url, file=sys.stderr)
@@ -163,11 +166,19 @@ def open_url(url, data):
             time.sleep(random.randint(2,5))
             print("** Connection problem (%s), reconnecting **" % e.reason, file=sys.stderr)
             continue
-        except (urllib.error.URLError, Exception) as e:
-            print("** Url seems invalid, aborting (%s) **" % url, file=sys.stderr)
-            if (e.reason):
-                print("** reason : %s **" % e.reason)
-            u = None
+        except urllib.error.URLError as e:
+            if re.match('timed out', str(e.reason)):
+                # on linux "timed out" is a socket.timeout exception, 
+                # on Windows it is an URLError exception....
+                print("** Connection problem (%s), reconnecting **" % e.reason, file=sys.stderr)
+                continue
+            else:
+                print("** URLError exception (%s), aborting **" % e.reason, file=sys.stderr)
+                u = None
+        except Exception as e:
+                print("** Exception: aborting (%s) with error: %s **" % (url, str(e)), file=sys.stderr)
+                u = None
+
         return u
 
 
@@ -256,6 +267,7 @@ def download_file(url, file_name):
     
         # find where to start the file download (continue or start at beginning)
         if (0 < dlded_size < real_size):
+            # file incomplete, we need to resume download
             u.close()
             req = urllib.request.Request(url, headers={'Range': 'bytes=%s-%s' % (dlded_size, real_size)})
             u = open_url(req, data=None)
@@ -266,13 +278,14 @@ def download_file(url, file_name):
                 partial_dl = 1
             else:
                 dlded_size = 0
-                nb_conn = 0
                 if debug: print("** Range/partial download is not supported by server **", file=sys.stderr)
     
         elif (dlded_size == real_size):
-            print("%s (file already complete, skipped)" % dl_status(file_name, dlded_size, real_size))
+            # file already completed, skipped
+            print("%s" % dl_status(file_name, dlded_size, real_size)) 
             return
         elif (dlded_size > real_size):
+            # we got a problem, restart download
             print("** Error: %s is bigger than original file or the real size could "
                   "not be determined, we will (re)download it! **" % file_name, file=sys.stderr)
             dlded_size = 0
@@ -305,7 +318,7 @@ def download_file(url, file_name):
             print("%s (file downloaded, but could not verify if it is complete)" 
                    % dl_status(file_name, dlded_size, real_size))
         elif (real_size == dlded_size):
-            print("%s (file downloaded and complete)" 
+            print("%s" # file downloaded and complete
                    % dl_status(file_name, dlded_size, real_size))
         elif (dlded_size < real_size):
             print("%s (file download incomplete!)" 
@@ -378,6 +391,8 @@ def download_song(url):
 
 
 def download_album(url, base_path):
+    global nb_conn
+    if debug: print("In download_album")
     page_soup = get_page_soup(url, str.encode(''))
     if not page_soup:
         if debug: print("** Unable to get album's page soup **", file=sys.stderr)
@@ -430,19 +445,37 @@ def download_artist(url, base_path):
 
     print("** Warning: we are going to download all albums from this artist! **")
 
+    albums_links = []
     for link in page_soup.find_all('a', href=True):
         if re.match(r'/album/.*', link['href']):
-            download_album(get_base_url(url) + link['href'], base_path)
+            # most of album's links appear 2 times, we need to de-duplicate.
+            if link['href'] not in albums_links:
+                albums_links.append(link['href'])
+
+    for album_link in albums_links:
+            download_album(get_base_url(url) + album_link, base_path)
  
 
 def main():
+    global debug
+    global socks_proxy
+    global socks_port
+    global version
+    global timeout
+    global nb_conn
+    global script_name
+
     parser = argparse.ArgumentParser(description=help_string, add_help=True, 
                                      formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
-        "-d", "--debug", type=int, choices=range(0,3), default=1, help="Debug verbosity: 0, 1, 2" )
+        "-d", "--debug", type=int, choices=range(0,3), default=0, help="Debug verbosity: 0, 1, 2" )
     parser.add_argument(
         "-s", "--socks", type=str, default=None, help='Sock proxy: "address:port" without "http://"')
+    parser.add_argument(
+        "-t", "--timeout", type=int, default=10, help='Timeout for HTTP connections in seconds')
+    parser.add_argument(
+        "-n", "--nb_conn", type=int, default=3, help='Number of simultaneous downloads (max 3 or 4 for tempfile.ru)')
     parser.add_argument(
         "-p", "--path", type=str, default=".", help="Base directory in which album(s) will be"
                                                     " downloaded. Defaults to current directory.")
@@ -452,8 +485,11 @@ def main():
     parser.add_argument("url", action='store', help="URL of album or artist page")
     args = parser.parse_args()
 
-    if (args.debug):
-        debug = args.debug
+    debug = int(args.debug)
+    if debug: print("Debug level: %s" % debug)
+
+    nb_conn = int(args.nb_conn)
+    timeout = int(args.timeout)
 
     if (args.socks):
         (socks_proxy, socks_port) = args.socks.split(':')
@@ -461,6 +497,7 @@ def main():
         if not socks_port.isdigit():
             print ("** Error in your socks proxy definition, exiting. **")
             sys.exit(1)
+        socks_port = int(socks_port)
 
     try:
         print("** We will try to use %s simultaneous downloads, progress will be shown **" % nb_conn)
@@ -475,7 +512,7 @@ def main():
                   file=sys.stderr)
 
     except Exception as e:
-        print("** Error: Cannot download URL: %s\n\t%s **" % (args.url, e), file=sys.stderr)
+        print("** Error: Cannot download URL: %s\n\t%s **" % (args.url, str(e)), file=sys.stderr)
 
 if __name__ == "__main__":
     main()
