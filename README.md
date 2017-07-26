@@ -35,9 +35,9 @@ user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/album/thunder_and_ligh
 Artist: Carpe Diem
 Album: Cueille Le Jour
 Year: 1976
-cover.jpg                                                 00.07 of 00.07 MB [100%] (file downloaded and complete)
-02-naissance.mp3                                          07.83 of 07.83 MB [100%] (file downloaded and complete)
-01-couleurs.mp3                                           49.59 of 49.59 MB [100%] (file downloaded and complete)
+cover.jpg                                                 00.07 of 00.07 MB [100%]
+02-naissance.mp3                                          07.83 of 07.83 MB [100%]
+01-couleurs.mp3                                           49.59 of 49.59 MB [100%]
 [...]
 
 It will create an "Artist - Album" directory in the path given as argument (or else in current
@@ -56,18 +56,18 @@ user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html
 Artist: Carpe Diem
 Album: Cueille Le Jour
 Year: 1976
-cover.jpg                                                 00.07 of 00.07 MB [100%] (file downloaded and complete)
-02-naissance.mp3                                          07.83 of 07.83 MB [100%] (file downloaded and complete)
-01-couleurs.mp3                                           49.59 of 49.59 MB [100%] (file downloaded and complete)
+cover.jpg                                                 00.07 of 00.07 MB [100%]
+02-naissance.mp3                                          07.83 of 07.83 MB [100%]
+01-couleurs.mp3                                           49.59 of 49.59 MB [100%]
 [...]
 
 Artist: Carpe Diem
 Album: En Regardant Passer Le Temps
 Year: 1975
-cover.jpg                                                 00.08 of 00.08 MB [100%] (file downloaded and complete)
-cover1.jpg                                                00.03 of 00.03 MB [100%] (file downloaded and complete)
-01-voyage_du_non-retour.mp3                               08.92 of 08.92 MB [100%] (file downloaded and complete)
-02-reincarnation.mp3                                      29.60 of 29.60 MB [100%] (file downloaded and complete)
+cover.jpg                                                 00.08 of 00.08 MB [100%]
+cover1.jpg                                                00.03 of 00.03 MB [100%]
+01-voyage_du_non-retour.mp3                               08.92 of 08.92 MB [100%]
+02-reincarnation.mp3                                      29.60 of 29.60 MB [100%]
 [...]
 
 
