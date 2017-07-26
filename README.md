@@ -28,16 +28,16 @@ Usage:
 ------------------------------------------------------------------------------------------------------------------
 ################## To download an album, give it an url with '/album/' in it #####################################
 ------------------------------------------------------------------------------------------------------------------
-user@computer:/tmp$ musicmp3spb-3.py [-p /path] 'http://musicmp3spb.org/album/thunder_and_lightning.html'
+user@computer:/tmp$ %s [-p /path] http://musicmp3spb.org/album/cueille_le_jour.html
 ** We will try to use 6 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 
 Artist: Carpe Diem
 Album: Cueille Le Jour
 Year: 1976
-cover.jpg                                                 00.07 of 00.07 MB [100%]
-02-naissance.mp3                                          07.83 of 07.83 MB [100%]
-01-couleurs.mp3                                           49.59 of 49.59 MB [100%]
+cover.jpg                                                 00.07 of 00.07 MB [100%%]
+02-naissance.mp3                                          07.83 of 07.83 MB [100%%]
+01-couleurs.mp3                                           49.59 of 49.59 MB [100%%]
 [...]
 
 It will create an "Artist - Album" directory in the path given as argument (or else in current
@@ -48,7 +48,7 @@ It will create an "Artist - Album" directory in the path given as argument (or e
 ################## To download all albums from an artist, give it an url with '/artist/' in it ###################
 ------------------------------------------------------------------------------------------------------------------
 
-user@computer:/tmp$ musicmp3spb-3.py [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html'
+user@computer:/tmp$ %s [-p /path] http://musicmp3spb.org/artist/carpe_diem.html
 ** We will try to use 3 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 ** Warning: we are going to download all albums from this artist! **
@@ -56,28 +56,30 @@ user@computer:/tmp$ musicmp3spb-3.py [-p /path] 'http://musicmp3spb.org/artist/t
 Artist: Carpe Diem
 Album: Cueille Le Jour
 Year: 1976
-cover.jpg                                                 00.07 of 00.07 MB [100%]
-02-naissance.mp3                                          07.83 of 07.83 MB [100%]
-01-couleurs.mp3                                           49.59 of 49.59 MB [100%]
+cover.jpg                                                 00.07 of 00.07 MB [100%%]
+02-naissance.mp3                                          07.83 of 07.83 MB [100%%]
+01-couleurs.mp3                                           49.59 of 49.59 MB [100%%]
 [...]
 
 Artist: Carpe Diem
 Album: En Regardant Passer Le Temps
 Year: 1975
-cover.jpg                                                 00.08 of 00.08 MB [100%]
-cover1.jpg                                                00.03 of 00.03 MB [100%]
-01-voyage_du_non-retour.mp3                               08.92 of 08.92 MB [100%]
-02-reincarnation.mp3                                      29.60 of 29.60 MB [100%]
+cover.jpg                                                 00.08 of 00.08 MB [100%%]
+cover1.jpg                                                00.03 of 00.03 MB [100%%]
+01-voyage_du_non-retour.mp3                               08.92 of 08.92 MB [100%%]
+02-reincarnation.mp3                                      29.60 of 29.60 MB [100%%]
 [...]
 
 
 It will iterate on all albums of this artist.
+
 
 ------------------------------------------------------------------------------------------------------------------
 ################# Command line help ##############################################################################
 ------------------------------------------------------------------------------------------------------------------
 
 For more info, see https://github.com/damsgithub/musicmp3spb-3.py
+
 
 positional arguments:
   url                   URL of album or artist page
