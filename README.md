@@ -90,6 +90,11 @@ optional arguments:
                         Debug verbosity: 0, 1, 2
   -s SOCKS, --socks SOCKS
                         Socks proxy: "address:port" without "http://"
-  -p PATH, --path PATH  Base directory in which album(s) will be downloaded. Defaults to current directory
+  -t TIMEOUT, --timeout TIMEOUT
+                        Timeout for HTTP connections in seconds
+  -n NB_CONN, --nb_conn NB_CONN
+                        Number of simultaneous downloads (max 3 or 4 for tempfile.ru)
+  -p PATH, --path PATH  Base directory in which album(s) will be downloaded. Defaults to current directory.
   -v, --version         show program's version number and exit
+
 ```
