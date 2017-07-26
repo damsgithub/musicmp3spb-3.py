@@ -89,7 +89,7 @@ optional arguments:
   -d {0,1,2}, --debug {0,1,2}
                         Debug verbosity: 0, 1, 2
   -s SOCKS, --socks SOCKS
-                        Sock proxy: "address:port" without "http://"
+                        Socks proxy: "address:port" without "http://"
   -p PATH, --path PATH  Base directory in which album(s) will be downloaded. Defaults to current directory
   -v, --version         show program's version number and exit
 ```
