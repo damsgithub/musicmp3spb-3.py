@@ -23,12 +23,14 @@ from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
 
+version = 4.7
+# global variables, use command line flags to change them.
 debug = 0
 socks_proxy = ""
 socks_port = ""
 timeout = 10
 nb_conn = 3
-version = 4.6
+
 script_name = os.path.basename(sys.argv[0])
 
 description = "Python script to download albums from http://musicmp3spb.org, version %s." % version
@@ -37,16 +39,16 @@ help_string = description + """
 ------------------------------------------------------------------------------------------------------------------
 ################## To download an album, give it an url with '/album/' in it #####################################
 ------------------------------------------------------------------------------------------------------------------
-user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/album/thunder_and_lightning.html'
+user@computer:/tmp$ %s [-p /path] http://musicmp3spb.org/album/cueille_le_jour.html
 ** We will try to use 6 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 
 Artist: Carpe Diem
 Album: Cueille Le Jour
 Year: 1976
-cover.jpg                                                 00.07 of 00.07 MB [100%%] (file downloaded and complete)
-02-naissance.mp3                                          07.83 of 07.83 MB [100%%] (file downloaded and complete)
-01-couleurs.mp3                                           49.59 of 49.59 MB [100%%] (file downloaded and complete)
+cover.jpg                                                 00.07 of 00.07 MB [100%%]
+02-naissance.mp3                                          07.83 of 07.83 MB [100%%]
+01-couleurs.mp3                                           49.59 of 49.59 MB [100%%]
 [...]
 
 It will create an "Artist - Album" directory in the path given as argument (or else in current
@@ -57,7 +59,7 @@ It will create an "Artist - Album" directory in the path given as argument (or e
 ################## To download all albums from an artist, give it an url with '/artist/' in it ###################
 ------------------------------------------------------------------------------------------------------------------
 
-user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html'
+user@computer:/tmp$ %s [-p /path] http://musicmp3spb.org/artist/carpe_diem.html
 ** We will try to use 3 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 ** Warning: we are going to download all albums from this artist! **
@@ -65,18 +67,18 @@ user@computer:/tmp$ %s [-p /path] 'http://musicmp3spb.org/artist/thin_lizzy.html
 Artist: Carpe Diem
 Album: Cueille Le Jour
 Year: 1976
-cover.jpg                                                 00.07 of 00.07 MB [100%%] (file downloaded and complete)
-02-naissance.mp3                                          07.83 of 07.83 MB [100%%] (file downloaded and complete)
-01-couleurs.mp3                                           49.59 of 49.59 MB [100%%] (file downloaded and complete)
+cover.jpg                                                 00.07 of 00.07 MB [100%%]
+02-naissance.mp3                                          07.83 of 07.83 MB [100%%]
+01-couleurs.mp3                                           49.59 of 49.59 MB [100%%]
 [...]
 
 Artist: Carpe Diem
 Album: En Regardant Passer Le Temps
 Year: 1975
-cover.jpg                                                 00.08 of 00.08 MB [100%%] (file downloaded and complete)
-cover1.jpg                                                00.03 of 00.03 MB [100%%] (file downloaded and complete)
-01-voyage_du_non-retour.mp3                               08.92 of 08.92 MB [100%%] (file downloaded and complete)
-02-reincarnation.mp3                                      29.60 of 29.60 MB [100%%] (file downloaded and complete)
+cover.jpg                                                 00.08 of 00.08 MB [100%%]
+cover1.jpg                                                00.03 of 00.03 MB [100%%]
+01-voyage_du_non-retour.mp3                               08.92 of 08.92 MB [100%%]
+02-reincarnation.mp3                                      29.60 of 29.60 MB [100%%]
 [...]
 
 
@@ -471,7 +473,7 @@ def main():
     parser.add_argument(
         "-d", "--debug", type=int, choices=range(0,3), default=0, help="Debug verbosity: 0, 1, 2" )
     parser.add_argument(
-        "-s", "--socks", type=str, default=None, help='Sock proxy: "address:port" without "http://"')
+        "-s", "--socks", type=str, default=None, help='Socks proxy: "address:port" without "http://"')
     parser.add_argument(
         "-t", "--timeout", type=int, default=10, help='Timeout for HTTP connections in seconds')
     parser.add_argument(
