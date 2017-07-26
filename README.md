@@ -19,7 +19,7 @@ Install:
 * install python 3 (tested with 3.6.2) if not already present on your distrib. For Windows, see here https://www.python.org/downloads/windows/
 * install required modules: BeautifulSoup4 and Pysocks. Use your standard repo for linux, for Windows do 
 ```sh
-python -m pip install BeautifulSoup4 Pysocks"
+python -m pip install BeautifulSoup4 Pysocks
 ```
 
 Usage:
