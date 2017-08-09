@@ -23,6 +23,7 @@ python -m pip install BeautifulSoup4 Pysocks
 ```
 
 Usage:
+Just give it an album or artist url from http://musicmp3spb.org/, see below:
 
 ```
 ------------------------------------------------------------------------------------------------------------------
