@@ -5,7 +5,7 @@ Features included:
 * Cover downloading
 * Windows/Linux support
 * Resume incomplete songs and albums downloads
-* Creation of directory with "Artist - Album" name.
+* Creation of directory with "Artist - Album (year)" name.
 * Multiple simultaneous downloads to download faster
 * Able to download all albums from an artist
 * Socks proxy support
