@@ -529,6 +529,8 @@ def download_artist(url, base_path, debug, socks_proxy, socks_port, timeout, nb_
     for album_link in albums_links:
             download_album(get_base_url(url, debug) + album_link, base_path, 
                            debug, socks_proxy, socks_port, timeout, nb_conn)
+    print("")
+    print("ARTIST DOWNLOAD FINISHED")
  
 
 def main():
