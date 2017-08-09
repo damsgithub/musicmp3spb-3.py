@@ -19,22 +19,15 @@ import socket
 import urllib.request
 import html
 import argparse
+import traceback
 from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
+version = 5.1
 
-version = 4.7
-# global variables, use command line flags to change them.
-debug = 0
-socks_proxy = ""
-socks_port = ""
-timeout = 10
-nb_conn = 3
-
-script_name = os.path.basename(sys.argv[0])
-
-description = "Python script to download albums from http://musicmp3spb.org, version %s." % version
-help_string = description + """
+def script_help(version, script_name):
+    description = "Python script to download albums from http://musicmp3spb.org, version %s." % version
+    help_string = description + """
 
 ------------------------------------------------------------------------------------------------------------------
 ################## To download an album, give it an url with '/album/' in it #####################################
@@ -93,12 +86,35 @@ For more info, see https://github.com/damsgithub/musicmp3spb-3.py
 
 
 """ % (script_name, script_name)
+    return help_string
 
 
 def to_MB(a_bytes):
     return a_bytes / 1024. / 1024.
 
 
+def check_os():
+    if sys.platform.startswith('win'):
+        return "win"
+    else:
+        return "unix"
+
+
+def color_message(msg, color):
+    if (check_os() == "win"):
+        os.system('') # enables VT100 Escape Sequence for WINDOWS 10 Ver. 1607
+    colors = {}
+    colors['yellow']       = "\033[0;33m"
+    colors['lightyellow']  = "\033[1;33m"
+    colors['red']          = "\033[0;31m"
+    colors['lightred']     = "\033[1;31m"
+    colors['green']        = "\033[0;32m"
+    colors['lightgreen']   = "\033[1;32m"
+    colors['magenta']      = "\033[0;35m"
+    colors['clear']        = "\033[0;39m"
+    print(colors[color] + msg + colors['clear'])
+
+   
 def spinning_wheel():
     while True:
         for cursor in '|/-\\':
@@ -111,7 +127,7 @@ def dl_status(file_name, dlded_size, real_size):
     return status
 
 
-def dl_cover(page_soup, url):
+def dl_cover(page_soup, url, debug, socks_proxy, socks_port, timeout):
     # download albums' cover(s)
     image_tags = page_soup.find_all('img')
     image_num = 0
@@ -126,22 +142,22 @@ def dl_cover(page_soup, url):
 
         # prepend base url if necessary
         if not re.match(r'^http:', image['src']):
-            image['src'] = get_base_url(url) + image['src']
+            image['src'] = get_base_url(url, debug) + image['src']
         if debug: print("image: %s" % image['src'])
 
         image_name = "cover"
         if image_num > 0 :
             image_name = image_name + str(image_num)
 
-        download_file(image['src'], image_name + ".jpg")
+        download_file(image['src'], image_name + ".jpg", debug, socks_proxy, socks_port, timeout)
 
         image_num += 1
 
     if (image_num == 0):
-        print("** No cover found for this album **", file=sys.stderr)
+        color_message("** No cover found for this album **", "yellow")
 
 
-def get_base_url(url):
+def get_base_url(url, debug):
     # get website base address to preprend it to images, songs and albums relative urls'
     base_url = url.split('//', 1)
     base_url = base_url[0] + '//' + base_url[1].split('/', 1)[0]
@@ -149,10 +165,7 @@ def get_base_url(url):
     return base_url
 
 
-def open_url(url, data):
-    global socks_proxy
-    global socks_port
-    global timeout
+def open_url(url, socks_proxy, socks_port, timeout, data):
     if socks_proxy and socks_port:
         socks.set_default_proxy(socks.SOCKS5, socks_proxy, socks_port)
         socket.socket = socks.socksocket
@@ -162,30 +175,35 @@ def open_url(url, data):
             u = urllib.request.urlopen(url, data, timeout=timeout)
             redirect = u.geturl()
             if re.search(r'/404.*', redirect):
-                print("** Page not found (404), aborting on url: %s **" % url, file=sys.stderr)
+                color_message("** Page not found (404), aborting on url: %s **" % url, "lightred")
                 u = None
-        except (urllib.error.HTTPError, socket.timeout, ConnectionError) as e:
+        except (urllib.error.HTTPError) as e:
+            color_message("** Connection problem (%s), reconnecting **" % e.reason, "yellow")
             time.sleep(random.randint(2,5))
-            print("** Connection problem (%s), reconnecting **" % e.reason, file=sys.stderr)
+            continue
+        except (socket.timeout, socket.error, ConnectionError) as e:
+            color_message("** Connection problem (%s), reconnecting **" % str(e), "yellow")
+            time.sleep(random.randint(2,5))
             continue
         except urllib.error.URLError as e:
-            if re.match('timed out', str(e.reason)):
+            if re.search('timed out', str(e.reason)):
                 # on linux "timed out" is a socket.timeout exception, 
                 # on Windows it is an URLError exception....
-                print("** Connection problem (%s), reconnecting **" % e.reason, file=sys.stderr)
+                color_message("** Connection problem (%s), reconnecting **" % e.reason, "yellow")
+                time.sleep(random.randint(2,5))
                 continue
             else:
-                print("** URLError exception (%s), aborting **" % e.reason, file=sys.stderr)
+                color_message("** URLError exception (%s), aborting **" % e.reason, "lightred")
                 u = None
         except Exception as e:
-                print("** Exception: aborting (%s) with error: %s **" % (url, str(e)), file=sys.stderr)
+                color_message("** Exception: aborting (%s) with error: %s **" % (url, str(e)), "lightred")
                 u = None
 
         return u
 
 
-def get_page_soup(url, data):
-    page = open_url(url, data=data)
+def get_page_soup(url, data, debug, socks_proxy, socks_port, timeout):
+    page = open_url(url, socks_proxy, socks_port, timeout, data=data)
     if not page:
         return None
     page_soup = BeautifulSoup(page, "html.parser", from_encoding=page.info().get_param('charset'))
@@ -194,7 +212,7 @@ def get_page_soup(url, data):
     return page_soup
 
 
-def prepare_album_dir(page_content, base_path):
+def prepare_album_dir(page_content, base_path, debug):
     # get album infos from html page content
     artist = ""
     title = ""
@@ -225,10 +243,15 @@ def prepare_album_dir(page_content, base_path):
     if album_infos and album_infos.group(1):
         year = album_infos.group(1)
         print("Year: %s" % year)
-    else:
-        year = input("Unable to get ALBUM YEAR. Please enter here (may leave blank): ")
+    #else:
+    #    year = input("Unable to get ALBUM YEAR. Please enter here (may leave blank): ")
 
-    album_dir = os.path.normpath(base_path + os.sep + sanitize_path(artist + " - " + title))
+    if year:
+        album_dir = artist + " - " + title + " (" + year + ")"
+    else:
+        album_dir = artist + " - " + title
+
+    album_dir = os.path.normpath(base_path + os.sep + sanitize_path(album_dir))
     if debug: print("Album's dir: %s" % (album_dir))
 
     if not os.path.exists(album_dir):
@@ -242,56 +265,77 @@ def sanitize_path(path):
     return path.translate(chars_to_remove)
 
 
-def download_file(url, file_name):
+def download_file(url, file_name, debug, socks_proxy, socks_port, timeout):
+    process_id = os.getpid()
     try:
+        real_size = -1
         partial_dl = 0
         dlded_size = 0
     
         if os.path.exists(file_name):
             dlded_size = os.path.getsize(file_name)
+        if (dlded_size <= 8192):
+            # we may have downloaded an "Exceed the download limit" (Превышение лимита скачивания) page 
+            # instead of the song, restart at beginning.
+            dlded_size = 0
+
     
         req = urllib.request.Request(url)
-        u = open_url(req, data=None)
-        if not u: return
+        u = open_url(req, socks_proxy, socks_port, timeout, data=None)
+        if not u:
+            return -1
+
 
         i = 0
         while (i < 5):
             try:
                 real_size = int(u.info()['content-length'])
+                if real_size <= 8192:
+                   # we got served an "Exceed the download limit" (Превышение лимита скачивания) page, 
+                   # retry without incrementing counter
+                   continue
+                else:
+                   # we got the size, exit this loop
+                   break
             except Exception as e:
                 if (i == 4):
-                    print("** Unable to get the real size of %s from the server. **" % file_name, file=sys.stderr)
-                    real_size = -1
+                    color_message("** Unable to get the real size of %s from the server because: %s. **" 
+                                  % (file_name, str(e)), "yellow")
+                    break # real_size == -1
                 else:
-                    i = +1
-                continue
-            break
-    
+                    i += 1
+                    if debug: print("%s problem while getting content-length: %s, retrying" 
+                                    % (process_id, str(e)), file=sys.stderr)
+                    continue
+ 
+
         # find where to start the file download (continue or start at beginning)
         if (0 < dlded_size < real_size):
             # file incomplete, we need to resume download
             u.close()
             req = urllib.request.Request(url, headers={'Range': 'bytes=%s-%s' % (dlded_size, real_size)})
-            u = open_url(req, data=None)
-            if not u: return
+            u = open_url(req, socks_proxy, socks_port, timeout, data=None)
+            if not u: return -1
     
             # test if the server supports the Range header
             if (u.getcode() == 206):
                 partial_dl = 1
             else:
+                color_message("** Range/partial download is not supported by server, restarting download at beginning **", "yellow")
                 dlded_size = 0
-                if debug: print("** Range/partial download is not supported by server **", file=sys.stderr)
     
         elif (dlded_size == real_size):
             # file already completed, skipped
-            print("%s" % dl_status(file_name, dlded_size, real_size)) 
+            color_message("%s" % dl_status(file_name, dlded_size, real_size), "green")
+            u.close()
             return
         elif (dlded_size > real_size):
             # we got a problem, restart download
-            print("** Error: %s is bigger than original file or the real size could "
-                  "not be determined, we will (re)download it! **" % file_name, file=sys.stderr)
-            dlded_size = 0
+            color_message("** The real size of %s could not be found or an other problem occured, retrying **" % file_name, "yellow")
+            u.close()
+            return -1
     
+
         # append or truncate
         if partial_dl:
             f = open(file_name, 'ab+')
@@ -300,7 +344,7 @@ def download_file(url, file_name):
     
         # get the file
         block_sz = 8192
-        spin = spinning_wheel()
+        #spin = spinning_wheel()
         while True:
             buffer = u.read(block_sz)
             if not buffer:
@@ -317,96 +361,120 @@ def download_file(url, file_name):
     
         if (real_size == -1): 
             real_size = dlded_size
-            print("%s (file downloaded, but could not verify if it is complete)" 
-                   % dl_status(file_name, dlded_size, real_size))
+            color_message("%s (file downloaded, but could not verify if it is complete)" 
+                   % dl_status(file_name, dlded_size, real_size), "yellow")
         elif (real_size == dlded_size):
-            print("%s" # file downloaded and complete
-                   % dl_status(file_name, dlded_size, real_size))
+            color_message("%s" # file downloaded and complete
+                   % dl_status(file_name, dlded_size, real_size), "green")
         elif (dlded_size < real_size):
-            print("%s (file download incomplete!)" 
-                   % dl_status(file_name, dlded_size, real_size))
+            color_message("%s (file download incomplete, retrying)" 
+                   % dl_status(file_name, dlded_size, real_size), "yellow")
+            u.close()
+            f.close()
+            return -1
     
         #sys.stdout.write('\n')
         u.close()
         f.close()
     except KeyboardInterrupt as e:
-        if debug: print("** download_file: keyboard interrupt detected **", file=sys.stderr)
+        if debug: print("** %s : download_file: keyboard interrupt detected **" % process_id, file=sys.stderr)
         raise e
+    except Exception as e:
+        color_message('** Exception caught in download_file(%s,%s) with error: "%s". We will continue anyway. **' 
+               % (url, file_name, str(e)), "yellow")
+        traceback.print_stack(file=sys.stderr)
+        pass
 
 
-def download_song(url):
-    try:
-        if debug: print("Downloading song from %s" % url)
-        file_name = ""
-    
-        page_soup = get_page_soup(url, str.encode(''))
-        if not page_soup: 
-            if debug: print("** Unable to get song's page soup **", file=sys.stderr)
-            return
-    
-        # get the filename
-        for form in page_soup.find_all('form'):
-            if re.match(r'/file/.*', form.attrs['action']):
+def download_song(params):
+    (url, debug, socks_proxy, socks_port, timeout) = params
+    process_id = os.getpid()
+
+    while True: # continue until we have the song
+        try:
+            if debug: print("%s: downloading song from %s" % (process_id, url))
+            file_name = ""
+        
+            page_soup = get_page_soup(url, str.encode(''), debug, socks_proxy, socks_port, timeout)
+            if not page_soup: 
+                if debug: print("** %s: Unable to get song's page soup, retrying **" % process_id, file=sys.stderr)
+                continue
+        
+            # get the filename
+            for form in page_soup.find_all('form'):
+                if re.match(r'/file/.*', form.attrs['action']):
+                    break
+            if debug > 1: print("form_attr: " + form.attrs['action'])
+        
+            for link in page_soup.find_all('a', href=True):
+                if re.match(form.attrs['action'], link['href']):
+                    file_name = link.contents[0]
+                    break
+            if file_name != "":
+                if debug: print("%s: got_filename: %s" % (process_id, file_name))
+            else:
+                color_message("** %s: Cannot find filename for: %s , retrying **" % (process_id, link['href']), "yellow")
+                continue
+        
+            # we need to re-submit the same page with an hidden input value to get the real link
+            submit_value = page_soup.find('input', {'name': 'robot_code'}).get('value')
+            if debug: print("%s: submit_value: %s" % (process_id, submit_value))
+        
+            data = urllib.parse.urlencode([('robot_code', submit_value)])
+        
+            response = open_url(url, socks_proxy, socks_port, timeout, data=None)
+            if not response:
+                color_message("** %s: Error: Unable to submit form for %s, skipping song **" % (process_id, file_name), "lightred")
+                return
+            real_link = response.geturl()
+            response.close()
+            response_soup = get_page_soup(real_link, str.encode(data), debug, socks_proxy, socks_port, timeout)
+            if not response_soup:
+                color_message("** %s: Error: Unable to get song's page soup (2), skipping song **" % process_id, "lightred")
+                return
+        
+            for song_link in response_soup.find_all('a', href=True):
+                if re.match(r'http://tempfile.ru/download/.*', song_link['href']):
+                    break
+            if song_link['href'] != "" and song_link['href'] != "/":
+                if debug: print("%s: song_link: %s" % (process_id, song_link['href']))
+            else:
+                color_message("** %s: Cannot find song's real link for: %s, retrying **" % (process_id, file_name), "yellow")
+                if debug > 1: print("** %s: response_soup %s" % (process_id, response_soup))
+                continue
+        
+            ret = download_file(song_link['href'], file_name, debug, socks_proxy, socks_port, timeout)
+            if ret == -1:
+                color_message("** %s: Problem detected while downloading %s, retrying **" % (process_id, file_name), "yellow")
+                continue
+            else:
                 break
-        if debug: print("form_attr: " + form.attrs['action'])
-    
-        for link in page_soup.find_all('a', href=True):
-            if re.match(form.attrs['action'], link['href']):
-                file_name = link.contents[0]
-                break
-        if file_name != "":
-            if debug: print("got_filename: " + file_name)
-        else:
-            print("** Error: Cannot find filename for: %s **" % link['href'], file=sys.stderr)
+        except KeyboardInterrupt:
+            if debug: print("** %s: keyboard interrupt detected, finishing process **" % process_id, file=sys.stderr)
+            # just return, see: 
+            # http://jessenoller.com/2009/01/08/multiprocessingpool-and-keyboardinterrupt/
             return
-    
-        # we need to re-submit the same page with an hidden input value to get the real link
-        submit_value = page_soup.find('input', {'name': 'robot_code'}).get('value')
-        if debug: print("submit_value: %s" % submit_value)
-    
-        data = urllib.parse.urlencode([('robot_code', submit_value)])
-    
-        response = open_url(url, data=None)
-        if not response: return
-        real_link = response.geturl()
-        response.close()
-        response_soup = get_page_soup(real_link, str.encode(data))
-        if not response_soup:
-            if debug: print("** Unable to get song's page soup (2) **", file=sys.stderr)
-            return
-    
-        for song_link in response_soup.find_all('a', href=True):
-            if re.match('http://tempfile.ru/download/.*', song_link['href']):
-                break
-        if song_link['href'] != "":
-            if debug: print("song_link: " + song_link['href'])
-        else:
-            print("** Error: Cannot find song's real link for: %s **" % file_name, file=sys.stderr)
-            return
-    
-        download_file(song_link['href'], file_name)
-    except KeyboardInterrupt:
-        print("** keyboard interrupt detected, finishing processes! **", file=sys.stderr)
-        # just return, see: 
-        # http://jessenoller.com/2009/01/08/multiprocessingpool-and-keyboardinterrupt/
-        return
+        except Exception as e:
+            color_message('** %s: Exception caught in download_song(%s,%s) with error: "%s", retrying **'
+                   % (process_id, url, file_name, str(e)), "yellow")
+            traceback.print_stack(file=sys.stderr)
+            pass
 
 
-def download_album(url, base_path):
-    global nb_conn
-    if debug: print("In download_album")
-    page_soup = get_page_soup(url, str.encode(''))
+
+def download_album(url, base_path, debug, socks_proxy, socks_port, timeout, nb_conn):
+    page_soup = get_page_soup(url, str.encode(''), debug, socks_proxy, socks_port, timeout)
     if not page_soup:
         if debug: print("** Unable to get album's page soup **", file=sys.stderr)
         return
     page_content = str(page_soup)
     if debug > 1: print(page_content)
 
-    album_dir = prepare_album_dir(page_content, base_path)
+    album_dir = prepare_album_dir(page_content, base_path, debug)
 
     os.chdir(album_dir)
  
-    dl_cover(page_soup, url)
+    dl_cover(page_soup, url, debug, socks_proxy, socks_port, timeout)
 
     # create list of album's songs
     songs_links = []
@@ -418,34 +486,38 @@ def download_album(url, base_path):
         if title_regexp.match(link['title']):
             # prepend base url if necessary
             if re.match(r'^/', link['href']):
-                link['href'] = get_base_url(url) + link['href']
+                link['href'] = get_base_url(url, debug) + link['href']
             songs_links.append(link['href'])
 
     if not songs_links:
-        print("** Unable to detect any song links, skipping this album/url **")
+        color_message("** Unable to detect any song links, skipping this album/url **", "lightred")
     else:
         # we launch the threads to do the downloads
         pool = Pool(processes=nb_conn)
+
+        # pool.map accepts only one argument for the function call, so me must aggregate all in one
+        params = [(url, debug, socks_proxy, socks_port, timeout) for url in songs_links]
         try:
-            pool.map(download_song, songs_links)
+            pool.map(download_song, params)
             pool.close()
             pool.join()
         except KeyboardInterrupt as e:
-            print("** Program interrupted by user, exiting! **", file=sys.stderr)
+            color_message("** Program interrupted by user, exiting! **", "lightred")
             pool.terminate()
             pool.join()
             sys.exit(1)
 
     os.chdir('..')
+    print("ALBUM DOWNLOAD FINISHED")
 
 
-def download_artist(url, base_path):
-    page_soup = get_page_soup(url, str.encode(''))
+def download_artist(url, base_path, debug, socks_proxy, socks_port, timeout, nb_conn):
+    page_soup = get_page_soup(url, str.encode(''), debug, socks_proxy, socks_port, timeout)
     if not page_soup:
         if debug: print("** Unable to get artist's page soup **", file=sys.stderr)
         return 
 
-    print("** Warning: we are going to download all albums from this artist! **")
+    color_message("** Warning: we are going to download all albums from this artist! **", "lightyellow")
 
     albums_links = []
     for link in page_soup.find_all('a', href=True):
@@ -455,19 +527,20 @@ def download_artist(url, base_path):
                 albums_links.append(link['href'])
 
     for album_link in albums_links:
-            download_album(get_base_url(url) + album_link, base_path)
+            download_album(get_base_url(url, debug) + album_link, base_path, 
+                           debug, socks_proxy, socks_port, timeout, nb_conn)
  
 
 def main():
-    global debug
-    global socks_proxy
-    global socks_port
     global version
-    global timeout
-    global nb_conn
-    global script_name
+    debug = 0
+    socks_proxy = ""
+    socks_port = ""
+    timeout = 10
+    nb_conn = 3
+    script_name = os.path.basename(sys.argv[0])
 
-    parser = argparse.ArgumentParser(description=help_string, add_help=True, 
+    parser = argparse.ArgumentParser(description=script_help(version, script_name), add_help=True, 
                                      formatter_class=argparse.RawTextHelpFormatter)
 
     parser.add_argument(
@@ -477,7 +550,7 @@ def main():
     parser.add_argument(
         "-t", "--timeout", type=int, default=10, help='Timeout for HTTP connections in seconds')
     parser.add_argument(
-        "-n", "--nb_conn", type=int, default=3, help='Number of simultaneous downloads (max 3 or 4 for tempfile.ru)')
+        "-n", "--nb_conn", type=int, default=3, help='Number of simultaneous downloads (max 3 for tempfile.ru)')
     parser.add_argument(
         "-p", "--path", type=str, default=".", help="Base directory in which album(s) will be"
                                                     " downloaded. Defaults to current directory.")
@@ -497,7 +570,7 @@ def main():
         (socks_proxy, socks_port) = args.socks.split(':')
         if debug: print("proxy socks: %s %s" % (socks_proxy, socks_port))
         if not socks_port.isdigit():
-            print ("** Error in your socks proxy definition, exiting. **")
+            color_message("** Error in your socks proxy definition, exiting. **", "lightred")
             sys.exit(1)
         socks_port = int(socks_port)
 
@@ -505,16 +578,18 @@ def main():
         print("** We will try to use %s simultaneous downloads, progress will be shown **" % nb_conn)
         print("** after each completed file but not necessarily in album's order. **")
 
+        # modification of global variables do not work correctly under windows with multiprocessing,
+        # so I have to pass all these parameters to these functions...
         if re.search(r'/artist/.*', args.url):
-            download_artist(args.url, args.path)
+            download_artist(args.url, args.path, debug, socks_proxy, socks_port, timeout, nb_conn)
         elif re.search(r'/album/.*', args.url):
-            download_album(args.url, args.path)
+            download_album(args.url, args.path, debug, socks_proxy, socks_port, timeout, nb_conn)
         else:
-            print("** Error: unable to recognize url, it should contain '/artist/' or '/album/'! **", 
-                  file=sys.stderr)
+            color_message("** Error: unable to recognize url, it should contain '/artist/' or '/album/'! **", "lightred")
 
     except Exception as e:
-        print("** Error: Cannot download URL: %s\n\t%s **" % (args.url, str(e)), file=sys.stderr)
+        color_message("** Error: Cannot download URL: %s, reason: %s **" % (args.url, str(e)), "lightred")
+        traceback.print_stack(file=sys.stderr)
 
 if __name__ == "__main__":
     main()
