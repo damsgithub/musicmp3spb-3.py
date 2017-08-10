@@ -9,7 +9,7 @@ Features included:
 * Multiple simultaneous downloads to download faster
 * Able to download all albums from an artist
 * Socks proxy support
-
+* Colored output
 
 TODO:
 * make some kind of progress bar (difficult because of the simultaneous downloads).
