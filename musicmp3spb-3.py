@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*- 
 
-# Copyright (C) 2017: Siergiej Riaguzow <xor256@gmx.com>, Dams
+# Copyright (C) 2017: "Siergiej Riaguzow <xor256@gmx.com>" for the original version
+# (https://github.com/xor512/musicmp3spb.org), and "Dams" for this fork
+# (https://github.com/damsgithub/musicmp3spb-3.py).
 # This work is free. You can redistribute it and/or modify it under the
 # terms of the Do What The Fuck You Want To Public License, Version 2,
 # as published by Sam Hocevar.  See the COPYING file for more details.
 
-# requires installation of the following modules: PySocks and Beautifulsoup4
+# requires installation of the following additional modules: PySocks and Beautifulsoup4
 
 import re
 import sys
@@ -19,11 +21,10 @@ import socket
 import urllib.request
 import html
 import argparse
-import traceback
 from multiprocessing import Pool
 from bs4 import BeautifulSoup
 
-version = 5.1
+version = 5.2
 
 def script_help(version, script_name):
     description = "Python script to download albums from http://musicmp3spb.org, version %s." % version
@@ -33,7 +34,7 @@ def script_help(version, script_name):
 ################## To download an album, give it an url with '/album/' in it #####################################
 ------------------------------------------------------------------------------------------------------------------
 user@computer:/tmp$ %s [-p /path] http://musicmp3spb.org/album/cueille_le_jour.html
-** We will try to use 6 simultaneous downloads, progress will be shown **
+** We will try to use 3 simultaneous downloads, progress will be shown **
 ** after each completed file but not necessarily in album's order. **
 
 Artist: Carpe Diem
@@ -101,8 +102,6 @@ def check_os():
 
 
 def color_message(msg, color):
-    if (check_os() == "win"):
-        os.system('') # enables VT100 Escape Sequence for WINDOWS 10 Ver. 1607
     colors = {}
     colors['yellow']       = "\033[0;33m"
     colors['lightyellow']  = "\033[1;33m"
@@ -112,9 +111,16 @@ def color_message(msg, color):
     colors['lightgreen']   = "\033[1;32m"
     colors['magenta']      = "\033[0;35m"
     colors['clear']        = "\033[0;39m"
+    if (check_os() == "win"):
+        # Check if color is supported in cmd.exe
+        if(sys.getwindowsversion()[0] >= 10 and sys.getwindowsversion()[2] >= 10586):
+            os.system('') # enables VT100 Escape Sequence for WINDOWS 10 Ver. 1607
+        else:
+            print(msg)
+            return
     print(colors[color] + msg + colors['clear'])
 
-   
+ 
 def spinning_wheel():
     while True:
         for cursor in '|/-\\':
@@ -154,7 +160,7 @@ def dl_cover(page_soup, url, debug, socks_proxy, socks_port, timeout):
         image_num += 1
 
     if (image_num == 0):
-        color_message("** No cover found for this album **", "yellow")
+        color_message("** No cover found for this album **", "lightyellow")
 
 
 def get_base_url(url, debug):
@@ -178,18 +184,18 @@ def open_url(url, socks_proxy, socks_port, timeout, data):
                 color_message("** Page not found (404), aborting on url: %s **" % url, "lightred")
                 u = None
         except (urllib.error.HTTPError) as e:
-            color_message("** Connection problem (%s), reconnecting **" % e.reason, "yellow")
+            color_message("** Connection problem (%s), reconnecting **" % e.reason, "lightyellow")
             time.sleep(random.randint(2,5))
             continue
         except (socket.timeout, socket.error, ConnectionError) as e:
-            color_message("** Connection problem (%s), reconnecting **" % str(e), "yellow")
+            color_message("** Connection problem (%s), reconnecting **" % str(e), "lightyellow")
             time.sleep(random.randint(2,5))
             continue
         except urllib.error.URLError as e:
             if re.search('timed out', str(e.reason)):
                 # on linux "timed out" is a socket.timeout exception, 
                 # on Windows it is an URLError exception....
-                color_message("** Connection problem (%s), reconnecting **" % e.reason, "yellow")
+                color_message("** Connection problem (%s), reconnecting **" % e.reason, "lightyellow")
                 time.sleep(random.randint(2,5))
                 continue
             else:
@@ -300,7 +306,7 @@ def download_file(url, file_name, debug, socks_proxy, socks_port, timeout):
             except Exception as e:
                 if (i == 4):
                     color_message("** Unable to get the real size of %s from the server because: %s. **" 
-                                  % (file_name, str(e)), "yellow")
+                                  % (file_name, str(e)), "lightyellow")
                     break # real_size == -1
                 else:
                     i += 1
@@ -321,17 +327,17 @@ def download_file(url, file_name, debug, socks_proxy, socks_port, timeout):
             if (u.getcode() == 206):
                 partial_dl = 1
             else:
-                color_message("** Range/partial download is not supported by server, restarting download at beginning **", "yellow")
+                color_message("** Range/partial download is not supported by server, restarting download at beginning **", "lightyellow")
                 dlded_size = 0
     
         elif (dlded_size == real_size):
             # file already completed, skipped
-            color_message("%s" % dl_status(file_name, dlded_size, real_size), "green")
+            color_message("%s" % dl_status(file_name, dlded_size, real_size), "lightgreen")
             u.close()
             return
         elif (dlded_size > real_size):
             # we got a problem, restart download
-            color_message("** The real size of %s could not be found or an other problem occured, retrying **" % file_name, "yellow")
+            color_message("** The real size of %s could not be found or an other problem occured, retrying **" % file_name, "lightyellow")
             u.close()
             return -1
     
@@ -362,13 +368,13 @@ def download_file(url, file_name, debug, socks_proxy, socks_port, timeout):
         if (real_size == -1): 
             real_size = dlded_size
             color_message("%s (file downloaded, but could not verify if it is complete)" 
-                   % dl_status(file_name, dlded_size, real_size), "yellow")
+                   % dl_status(file_name, dlded_size, real_size), "lightyellow")
         elif (real_size == dlded_size):
             color_message("%s" # file downloaded and complete
-                   % dl_status(file_name, dlded_size, real_size), "green")
+                   % dl_status(file_name, dlded_size, real_size), "lightgreen")
         elif (dlded_size < real_size):
             color_message("%s (file download incomplete, retrying)" 
-                   % dl_status(file_name, dlded_size, real_size), "yellow")
+                   % dl_status(file_name, dlded_size, real_size), "lightyellow")
             u.close()
             f.close()
             return -1
@@ -381,7 +387,7 @@ def download_file(url, file_name, debug, socks_proxy, socks_port, timeout):
         raise e
     except Exception as e:
         color_message('** Exception caught in download_file(%s,%s) with error: "%s". We will continue anyway. **' 
-               % (url, file_name, str(e)), "yellow")
+               % (url, file_name, str(e)), "lightyellow")
         traceback.print_stack(file=sys.stderr)
         pass
 
@@ -413,7 +419,7 @@ def download_song(params):
             if file_name != "":
                 if debug: print("%s: got_filename: %s" % (process_id, file_name))
             else:
-                color_message("** %s: Cannot find filename for: %s , retrying **" % (process_id, link['href']), "yellow")
+                color_message("** %s: Cannot find filename for: %s , retrying **" % (process_id, link['href']), "lightyellow")
                 continue
         
             # we need to re-submit the same page with an hidden input value to get the real link
@@ -439,13 +445,13 @@ def download_song(params):
             if song_link['href'] != "" and song_link['href'] != "/":
                 if debug: print("%s: song_link: %s" % (process_id, song_link['href']))
             else:
-                color_message("** %s: Cannot find song's real link for: %s, retrying **" % (process_id, file_name), "yellow")
+                color_message("** %s: Cannot find song's real link for: %s, retrying **" % (process_id, file_name), "lightyellow")
                 if debug > 1: print("** %s: response_soup %s" % (process_id, response_soup))
                 continue
         
             ret = download_file(song_link['href'], file_name, debug, socks_proxy, socks_port, timeout)
             if ret == -1:
-                color_message("** %s: Problem detected while downloading %s, retrying **" % (process_id, file_name), "yellow")
+                color_message("** %s: Problem detected while downloading %s, retrying **" % (process_id, file_name), "lightyellow")
                 continue
             else:
                 break
@@ -456,7 +462,7 @@ def download_song(params):
             return
         except Exception as e:
             color_message('** %s: Exception caught in download_song(%s,%s) with error: "%s", retrying **'
-                   % (process_id, url, file_name, str(e)), "yellow")
+                   % (process_id, url, file_name, str(e)), "lightyellow")
             traceback.print_stack(file=sys.stderr)
             pass
 
